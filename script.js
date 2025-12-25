@@ -5,7 +5,12 @@ const { Engine, Render, Runner, Bodies, Composite, Events } = Matter;
 let resolutionData = [];
 let marbles = [];
 let engine, render, world;
-let searchFilter = '';
+let searchFilters = {
+    id: '',
+    resolution: '',
+    initials: '',
+    city: ''
+};
 let startTime = Date.now();
 
 // Helper functions for color manipulation
@@ -41,7 +46,7 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
     context.shadowOffsetX = 0;
     context.shadowOffsetY = 8;
 
-    // Draw opaque interior background with gradient
+    // Draw opaque interior background with gradient and rounded corners
     const interiorGradient = context.createLinearGradient(leftX, topY, leftX, bottomY);
     interiorGradient.addColorStop(0, 'rgba(220, 230, 240, 0.4)');
     interiorGradient.addColorStop(0.5, 'rgba(200, 215, 230, 0.5)');
@@ -49,12 +54,22 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
 
     context.fillStyle = interiorGradient;
     context.beginPath();
+    // Start from bottom left, after the corner
     context.moveTo(leftX + cornerRadius, bottomY);
+    // Bottom edge to bottom right corner
     context.lineTo(rightX - cornerRadius, bottomY);
+    // Bottom right corner
     context.arcTo(rightX, bottomY, rightX, bottomY - cornerRadius, cornerRadius);
-    context.lineTo(rightX, topY);
-    context.lineTo(leftX, topY);
+    // Right wall up, with rounded top corners
+    context.lineTo(rightX, topY + cornerRadius);
+    context.arcTo(rightX, topY, rightX - cornerRadius, topY, cornerRadius);
+    // Top edge
+    context.lineTo(leftX + cornerRadius, topY);
+    // Top left corner
+    context.arcTo(leftX, topY, leftX, topY + cornerRadius, cornerRadius);
+    // Left wall down to bottom left corner
     context.lineTo(leftX, bottomY - cornerRadius);
+    // Bottom left corner
     context.arcTo(leftX, bottomY, leftX + cornerRadius, bottomY, cornerRadius);
     context.closePath();
     context.fill();
@@ -172,21 +187,21 @@ async function init() {
         console.log('Loading from embedded data (use a local server to load from JSON)');
         // Fallback to embedded data if JSON fails to load
         resolutionData = [
-            { id: "2025-001", resolution: "Wake up before sunrise every day", initials: "DL", city: "Chicago, USA", age: 25, color: "#FFB3BA", size: 1.0 },
-            { id: "2025-002", resolution: "Complete my first triathlon in June", initials: "SK", city: "New York, USA", age: 32, color: "#FFDFBA", size: 1.1 },
-            { id: "2025-003", resolution: "Have real conversations with strangers weekly", initials: "MJ", city: "Austin, USA", age: 28, color: "#FFFFBA", size: 0.9 },
-            { id: "2025-004", resolution: "Launch the business I've been dreaming about", initials: "AP", city: "San Francisco, USA", age: 30, color: "#BAFFC9", size: 1.1 },
-            { id: "2025-005", resolution: "Stop checking phone first thing in morning", initials: "RG", city: "Seattle, USA", age: 27, color: "#BAE1FF", size: 1.0 },
-            { id: "2025-006", resolution: "Visit six countries across three continents", initials: "LC", city: "Boston, USA", age: 24, color: "#E0BBE4", size: 0.9 },
-            { id: "2025-007", resolution: "Finish writing the novel collecting dust", initials: "TH", city: "Portland, USA", age: 35, color: "#FFC8DD", size: 1.1 },
-            { id: "2025-008", resolution: "Do fifty pushups without stopping by summer", initials: "NK", city: "Denver, USA", age: 29, color: "#A2D2FF", size: 1.0 },
-            { id: "2025-009", resolution: "Cook dinner from scratch three times weekly", initials: "BW", city: "Miami, USA", age: 31, color: "#CDB4DB", size: 0.9 },
-            { id: "2025-010", resolution: "Eliminate all credit card debt completely", initials: "JS", city: "Atlanta, USA", age: 26, color: "#FEC89A", size: 1.0 },
-            { id: "2025-011", resolution: "Mentor a young person in my field", initials: "EP", city: "Philadelphia, USA", age: 33, color: "#FFB3BA", size: 1.1 },
-            { id: "2025-012", resolution: "Perform live at an open mic night", initials: "CM", city: "Nashville, USA", age: 23, color: "#BAFFC9", size: 0.9 },
-            { id: "2025-013", resolution: "Record and publish twelve podcast episodes", initials: "DK", city: "Los Angeles, USA", age: 28, color: "#BAE1FF", size: 1.0 },
-            { id: "2025-014", resolution: "Write handwritten letters to ten distant friends", initials: "AL", city: "Phoenix, USA", age: 30, color: "#E0BBE4", size: 1.1 },
-            { id: "2025-015", resolution: "Host monthly dinners to reconnect with loved ones", initials: "VM", city: "Minneapolis, USA", age: 27, color: "#FFC8DD", size: 0.9 }
+            { id: "001", resolution: "Wake up before sunrise every day", initials: "DL", city: "Chicago, USA", age: 25, color: "#FFB3BA", size: 1.0 },
+            { id: "002", resolution: "Complete my first triathlon in June", initials: "SK", city: "New York, USA", age: 32, color: "#FFDFBA", size: 1.1 },
+            { id: "003", resolution: "Have real conversations with strangers weekly", initials: "MJ", city: "Austin, USA", age: 28, color: "#FFFFBA", size: 0.9 },
+            { id: "004", resolution: "Launch the business I've been dreaming about", initials: "AP", city: "San Francisco, USA", age: 30, color: "#BAFFC9", size: 1.1 },
+            { id: "005", resolution: "Stop checking phone first thing in morning", initials: "RG", city: "Seattle, USA", age: 27, color: "#BAE1FF", size: 1.0 },
+            { id: "006", resolution: "Visit six countries across three continents", initials: "LC", city: "Boston, USA", age: 24, color: "#E0BBE4", size: 0.9 },
+            { id: "007", resolution: "Finish writing the novel collecting dust", initials: "TH", city: "Portland, USA", age: 35, color: "#FFC8DD", size: 1.1 },
+            { id: "008", resolution: "Do fifty pushups without stopping by summer", initials: "NK", city: "Denver, USA", age: 29, color: "#A2D2FF", size: 1.0 },
+            { id: "009", resolution: "Cook dinner from scratch three times weekly", initials: "BW", city: "Miami, USA", age: 31, color: "#CDB4DB", size: 0.9 },
+            { id: "010", resolution: "Eliminate all credit card debt completely", initials: "JS", city: "Atlanta, USA", age: 26, color: "#FEC89A", size: 1.0 },
+            { id: "011", resolution: "Mentor a young person in my field", initials: "EP", city: "Philadelphia, USA", age: 33, color: "#FFB3BA", size: 1.1 },
+            { id: "012", resolution: "Perform live at an open mic night", initials: "CM", city: "Nashville, USA", age: 23, color: "#BAFFC9", size: 0.9 },
+            { id: "013", resolution: "Record and publish twelve podcast episodes", initials: "DK", city: "Los Angeles, USA", age: 28, color: "#BAE1FF", size: 1.0 },
+            { id: "014", resolution: "Write handwritten letters to ten distant friends", initials: "AL", city: "Phoenix, USA", age: 30, color: "#E0BBE4", size: 1.1 },
+            { id: "015", resolution: "Host monthly dinners to reconnect with loved ones", initials: "VM", city: "Minneapolis, USA", age: 27, color: "#FFC8DD", size: 0.9 }
         ];
     }
 
@@ -209,7 +224,7 @@ function setupPhysics() {
     const screenHeight = window.innerHeight;
 
     // Fixed jar width to mimic mobile view (typical phone width ~375-428px)
-    const fixedJarWidth = 340; // Fixed width regardless of screen size
+    const fixedJarWidth = 330; // Fixed width regardless of screen size
     const jarWidth = fixedJarWidth;
     const marbleRadius = jarWidth / 12;
     const wallThickness = 20;
@@ -220,8 +235,8 @@ function setupPhysics() {
     }, 0);
 
     // Base jar height calculation
-    // Adjust the multiplier here to change jar height (currently 0.0175)
-    const heightMultiplier = 0.0175;
+    // Adjust the multiplier here to change jar height (currently 0.014)
+    const heightMultiplier = 0.014;
     const jarHeight = screenHeight * totalSizeMultiplier * heightMultiplier;
 
     console.log(`Total size multiplier sum: ${totalSizeMultiplier.toFixed(2)}`);
@@ -361,11 +376,18 @@ function setupPhysics() {
             const radius = marble.circleRadius;
             const angle = marble.angle;
             const color = marble.marbleColor;
-            const text = marble.resolutionData.resolution;
-            const id = marble.resolutionData.id;
+            const data = marble.resolutionData;
+            const text = data.resolution;
+            const id = data.id;
 
-            // Check if this marble matches the search filter
-            const isFiltered = searchFilter && !id.toLowerCase().includes(searchFilter.toLowerCase());
+            // Check if this marble matches the search filters
+            const hasActiveFilters = searchFilters.id || searchFilters.resolution || searchFilters.initials || searchFilters.city;
+            const isFiltered = hasActiveFilters && !(
+                (!searchFilters.id || id.toLowerCase().includes(searchFilters.id)) &&
+                (!searchFilters.resolution || data.resolution.toLowerCase().includes(searchFilters.resolution)) &&
+                (!searchFilters.initials || data.initials.toLowerCase().includes(searchFilters.initials)) &&
+                (!searchFilters.city || data.city.toLowerCase().includes(searchFilters.city))
+            );
 
             context.save();
 
@@ -422,7 +444,7 @@ function setupPhysics() {
             context.fillStyle = isFiltered ? 'rgba(120, 120, 120, 0.5)' : 'rgba(74, 74, 74, 0.75)';
             context.textAlign = 'center';
             context.textBaseline = 'middle';
-            context.font = `${radius * 0.22}px 'Inter', 'Helvetica Neue', 'Arial', sans-serif`;
+            context.font = `${radius * 0.22}px 'Kalam', 'Patrick Hand', 'Caveat', cursive`;
 
             // Improve text rendering quality
             context.imageSmoothingEnabled = true;
@@ -467,18 +489,45 @@ function setupPhysics() {
 }
 
 function setupSearch() {
-    const searchInput = document.getElementById('search-input');
+    const searchId = document.getElementById('search-id');
+    const searchResolution = document.getElementById('search-resolution');
+    const searchInitials = document.getElementById('search-initials');
+    const searchCity = document.getElementById('search-city');
 
-    searchInput.addEventListener('input', (event) => {
-        searchFilter = event.target.value.trim();
+    searchId.addEventListener('input', (event) => {
+        searchFilters.id = event.target.value.trim().toLowerCase();
     });
 
-    // Clear search on escape key
-    searchInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-            searchInput.value = '';
-            searchFilter = '';
-        }
+    searchResolution.addEventListener('input', (event) => {
+        searchFilters.resolution = event.target.value.trim().toLowerCase();
+    });
+
+    searchInitials.addEventListener('input', (event) => {
+        searchFilters.initials = event.target.value.trim().toLowerCase();
+    });
+
+    searchCity.addEventListener('input', (event) => {
+        searchFilters.city = event.target.value.trim().toLowerCase();
+    });
+
+    // Clear all searches on escape key
+    const clearAll = () => {
+        searchId.value = '';
+        searchResolution.value = '';
+        searchInitials.value = '';
+        searchCity.value = '';
+        searchFilters.id = '';
+        searchFilters.resolution = '';
+        searchFilters.initials = '';
+        searchFilters.city = '';
+    };
+
+    [searchId, searchResolution, searchInitials, searchCity].forEach(input => {
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                clearAll();
+            }
+        });
     });
 }
 
@@ -517,8 +566,8 @@ function setupInteractions() {
         modalMarble.style.backgroundColor = color;
         modalMarble.textContent = data.resolution.toLowerCase();
         modalId.textContent = data.id;
-        modalInitials.textContent = `from ${data.initials}`;
-        modalCity.textContent = data.city;
+        modalInitials.textContent = `by ${data.initials}`;
+        modalCity.textContent = `from ${data.city}`;
         modalAge.textContent = `${data.age} years young`;
 
         modal.classList.add('active');
