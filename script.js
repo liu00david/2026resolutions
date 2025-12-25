@@ -1,360 +1,584 @@
-// Matter.js aliases
-const { Engine, Render, World, Bodies, Body, Events } = Matter;
+// Matter.js setup
+const { Engine, Render, Runner, Bodies, Composite, Events } = Matter;
 
-// State
-let resolutions = [];
-let expandedMarble = null;
-let introComplete = false;
+// Global variables
+let resolutionData = [];
+let marbles = [];
+let engine, render, world;
+let searchFilter = '';
+let startTime = Date.now();
 
-// Physics
-let engine;
-let world;
-let marblesData = []; // Stores {body, element, resolution}
-
-// Configuration
-const INTRO_DURATION = 1500; // ms
-const PREFERS_REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-// Responsive sizing
-let JAR_WIDTH, MARBLE_SIZE, JAR_PADDING;
-
-function updateDimensions() {
-    const isMobile = window.innerWidth < 768;
-    JAR_WIDTH = isMobile ? 340 : 600;
-    MARBLE_SIZE = isMobile ? 70 : 100;
-    JAR_PADDING = 20;
+// Helper functions for color manipulation
+function lightenColor(color, percent) {
+    const num = parseInt(color.replace("#", ""), 16);
+    const r = Math.min(255, ((num >> 16) & 0xff) + Math.round(2.55 * percent));
+    const g = Math.min(255, ((num >> 8) & 0xff) + Math.round(2.55 * percent));
+    const b = Math.min(255, (num & 0xff) + Math.round(2.55 * percent));
+    return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Initialize
+function darkenColor(color, percent) {
+    const num = parseInt(color.replace("#", ""), 16);
+    const r = Math.max(0, ((num >> 16) & 0xff) - Math.round(2.55 * percent));
+    const g = Math.max(0, ((num >> 8) & 0xff) - Math.round(2.55 * percent));
+    const b = Math.max(0, (num & 0xff) - Math.round(2.55 * percent));
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Draw realistic 3D glass jar
+function drawGlassJar(context, centerX, centerY, width, height, thickness) {
+    const leftX = centerX - width / 2;
+    const rightX = centerX + width / 2;
+    const topY = centerY - height / 2;
+    const bottomY = centerY + height / 2;
+    const cornerRadius = 15;
+
+    context.save();
+
+    // Draw shadow behind jar for 3D depth
+    context.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    context.shadowBlur = 20;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 8;
+
+    // Draw opaque interior background with gradient
+    const interiorGradient = context.createLinearGradient(leftX, topY, leftX, bottomY);
+    interiorGradient.addColorStop(0, 'rgba(220, 230, 240, 0.4)');
+    interiorGradient.addColorStop(0.5, 'rgba(200, 215, 230, 0.5)');
+    interiorGradient.addColorStop(1, 'rgba(180, 200, 220, 0.6)');
+
+    context.fillStyle = interiorGradient;
+    context.beginPath();
+    context.moveTo(leftX + cornerRadius, bottomY);
+    context.lineTo(rightX - cornerRadius, bottomY);
+    context.arcTo(rightX, bottomY, rightX, bottomY - cornerRadius, cornerRadius);
+    context.lineTo(rightX, topY);
+    context.lineTo(leftX, topY);
+    context.lineTo(leftX, bottomY - cornerRadius);
+    context.arcTo(leftX, bottomY, leftX + cornerRadius, bottomY, cornerRadius);
+    context.closePath();
+    context.fill();
+
+    // Reset shadow for other elements
+    context.shadowColor = 'transparent';
+    context.shadowBlur = 0;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+
+    // Draw continuous glass jar path with rounded corners
+    context.beginPath();
+    // Start at bottom left corner
+    context.moveTo(leftX + cornerRadius, bottomY + thickness / 2);
+    // Bottom edge
+    context.lineTo(rightX - cornerRadius, bottomY + thickness / 2);
+    // Bottom right corner (outer)
+    context.arcTo(rightX + thickness / 2, bottomY + thickness / 2, rightX + thickness / 2, bottomY - cornerRadius, cornerRadius);
+    // Right wall
+    context.lineTo(rightX + thickness / 2, topY);
+    // Top right (open)
+    context.lineTo(rightX - thickness / 2, topY);
+    // Right inner wall
+    context.lineTo(rightX - thickness / 2, bottomY - cornerRadius);
+    // Bottom right corner (inner)
+    context.arcTo(rightX - thickness / 2, bottomY - thickness / 2, rightX - cornerRadius, bottomY - thickness / 2, cornerRadius);
+    // Bottom inner edge
+    context.lineTo(leftX + cornerRadius, bottomY - thickness / 2);
+    // Bottom left corner (inner)
+    context.arcTo(leftX + thickness / 2, bottomY - thickness / 2, leftX + thickness / 2, bottomY - cornerRadius, cornerRadius);
+    // Left inner wall
+    context.lineTo(leftX + thickness / 2, topY);
+    // Top left (open)
+    context.lineTo(leftX - thickness / 2, topY);
+    // Left outer wall
+    context.lineTo(leftX - thickness / 2, bottomY - cornerRadius);
+    // Bottom left corner (outer)
+    context.arcTo(leftX - thickness / 2, bottomY + thickness / 2, leftX + cornerRadius, bottomY + thickness / 2, cornerRadius);
+    context.closePath();
+
+    // Create gradient for glass effect
+    const glassGradient = context.createLinearGradient(leftX - thickness, centerY, rightX + thickness, centerY);
+    glassGradient.addColorStop(0, 'rgba(200, 220, 240, 0.35)');
+    glassGradient.addColorStop(0.15, 'rgba(255, 255, 255, 0.5)');
+    glassGradient.addColorStop(0.5, 'rgba(180, 200, 220, 0.3)');
+    glassGradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.5)');
+    glassGradient.addColorStop(1, 'rgba(200, 220, 240, 0.35)');
+
+    context.fillStyle = glassGradient;
+    context.fill();
+
+    // Add glass rim highlight
+    context.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    context.lineWidth = 2;
+    context.stroke();
+
+    // Add inner shadow for depth
+    context.save();
+    context.clip();
+    context.shadowColor = 'rgba(100, 120, 140, 0.15)';
+    context.shadowBlur = 8;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = -5;
+
+    context.strokeStyle = 'rgba(120, 140, 160, 0.3)';
+    context.lineWidth = 3;
+    context.beginPath();
+    // Inner edge path
+    context.moveTo(leftX + cornerRadius, bottomY - thickness / 2);
+    context.lineTo(rightX - cornerRadius, bottomY - thickness / 2);
+    context.arcTo(rightX - thickness / 2, bottomY - thickness / 2, rightX - thickness / 2, bottomY - cornerRadius - thickness / 2, cornerRadius);
+    context.lineTo(rightX - thickness / 2, topY + 5);
+    context.moveTo(leftX + thickness / 2, topY + 5);
+    context.lineTo(leftX + thickness / 2, bottomY - cornerRadius);
+    context.arcTo(leftX + thickness / 2, bottomY - thickness / 2, leftX + cornerRadius, bottomY - thickness / 2, cornerRadius);
+    context.stroke();
+    context.restore();
+
+    // Add vertical highlights on sides
+    const leftHighlight = context.createLinearGradient(leftX - thickness / 2, topY, leftX + thickness, topY);
+    leftHighlight.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    leftHighlight.addColorStop(0.5, 'rgba(255, 255, 255, 0.6)');
+    leftHighlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    context.strokeStyle = leftHighlight;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(leftX, topY + 20);
+    context.lineTo(leftX, bottomY - cornerRadius - 20);
+    context.stroke();
+
+    const rightHighlight = context.createLinearGradient(rightX - thickness, topY, rightX + thickness / 2, topY);
+    rightHighlight.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    rightHighlight.addColorStop(0.5, 'rgba(255, 255, 255, 0.6)');
+    rightHighlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    context.strokeStyle = rightHighlight;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(rightX, topY + 20);
+    context.lineTo(rightX, bottomY - cornerRadius - 20);
+    context.stroke();
+
+    context.restore();
+}
+
+// Initialize the application
 async function init() {
-    updateDimensions();
-    await loadResolutions();
-    const jar = renderJar();
-    const jarPos = initPhysics(jar);
-    addMarblesWithPhysics(jarPos);
-    startPhysicsLoop();
-
-    // Keep at top for now (no intro scroll)
-    window.scrollTo(0, 0);
-    introComplete = true;
-
-    // Stop physics after 5 seconds
-    setTimeout(() => {
-        freezeAllMarbles();
-    }, 5000);
-}
-
-// Load resolutions from JSON
-async function loadResolutions() {
     try {
+        // Try to load resolution data from JSON
         const response = await fetch('resolutions.json');
-        resolutions = await response.json();
-        // Reverse so oldest are at bottom (added first)
-        resolutions.reverse();
+        if (!response.ok) throw new Error('Failed to load JSON');
+        resolutionData = await response.json();
     } catch (error) {
-        console.error('Error loading resolutions:', error);
+        console.log('Loading from embedded data (use a local server to load from JSON)');
+        // Fallback to embedded data if JSON fails to load
+        resolutionData = [
+            { id: "2025-001", resolution: "Wake up before sunrise every day", initials: "DL", city: "Chicago, USA", age: 25, color: "#FFB3BA", size: 1.0 },
+            { id: "2025-002", resolution: "Complete my first triathlon in June", initials: "SK", city: "New York, USA", age: 32, color: "#FFDFBA", size: 1.1 },
+            { id: "2025-003", resolution: "Have real conversations with strangers weekly", initials: "MJ", city: "Austin, USA", age: 28, color: "#FFFFBA", size: 0.9 },
+            { id: "2025-004", resolution: "Launch the business I've been dreaming about", initials: "AP", city: "San Francisco, USA", age: 30, color: "#BAFFC9", size: 1.1 },
+            { id: "2025-005", resolution: "Stop checking phone first thing in morning", initials: "RG", city: "Seattle, USA", age: 27, color: "#BAE1FF", size: 1.0 },
+            { id: "2025-006", resolution: "Visit six countries across three continents", initials: "LC", city: "Boston, USA", age: 24, color: "#E0BBE4", size: 0.9 },
+            { id: "2025-007", resolution: "Finish writing the novel collecting dust", initials: "TH", city: "Portland, USA", age: 35, color: "#FFC8DD", size: 1.1 },
+            { id: "2025-008", resolution: "Do fifty pushups without stopping by summer", initials: "NK", city: "Denver, USA", age: 29, color: "#A2D2FF", size: 1.0 },
+            { id: "2025-009", resolution: "Cook dinner from scratch three times weekly", initials: "BW", city: "Miami, USA", age: 31, color: "#CDB4DB", size: 0.9 },
+            { id: "2025-010", resolution: "Eliminate all credit card debt completely", initials: "JS", city: "Atlanta, USA", age: 26, color: "#FEC89A", size: 1.0 },
+            { id: "2025-011", resolution: "Mentor a young person in my field", initials: "EP", city: "Philadelphia, USA", age: 33, color: "#FFB3BA", size: 1.1 },
+            { id: "2025-012", resolution: "Perform live at an open mic night", initials: "CM", city: "Nashville, USA", age: 23, color: "#BAFFC9", size: 0.9 },
+            { id: "2025-013", resolution: "Record and publish twelve podcast episodes", initials: "DK", city: "Los Angeles, USA", age: 28, color: "#BAE1FF", size: 1.0 },
+            { id: "2025-014", resolution: "Write handwritten letters to ten distant friends", initials: "AL", city: "Phoenix, USA", age: 30, color: "#E0BBE4", size: 1.1 },
+            { id: "2025-015", resolution: "Host monthly dinners to reconnect with loved ones", initials: "VM", city: "Minneapolis, USA", age: 27, color: "#FFC8DD", size: 0.9 }
+        ];
     }
+
+    // Start the physics engine
+    setupPhysics();
 }
 
-// Render the jar container first to get its position
-function renderJar() {
-    const container = document.getElementById('container');
-    const jar = document.createElement('div');
-    jar.className = 'jar';
-    jar.id = 'jar';
-
-    // Calculate jar height dynamically
-    const estimatedRows = Math.ceil(resolutions.length / 5);
-    const jarHeight = Math.max(600, estimatedRows * MARBLE_SIZE + 200);
-    jar.style.height = jarHeight + 'px';
-
-    container.appendChild(jar);
-
-    return jar;
-}
-
-// Initialize physics engine
-function initPhysics(jar) {
+function setupPhysics() {
+    // Create engine with improved settings
     engine = Engine.create({
-        gravity: { x: 0, y: 1 }
+        constraintIterations: 4,
+        positionIterations: 8,
+        velocityIterations: 6
     });
     world = engine.world;
+    engine.world.gravity.y = 0.8;
 
-    // Get jar's actual position (including scroll offset)
-    const jarRect = jar.getBoundingClientRect();
-    const jarX = jarRect.left + jarRect.width / 2;
-    const jarY = jarRect.top + window.scrollY; // Add scroll offset for absolute positioning
-    const jarHeight = jarRect.height;
+    // Get viewport dimensions (phone optimized)
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
 
-    console.log('Jar position:', {
+    // Fixed jar width to mimic mobile view (typical phone width ~375-428px)
+    const fixedJarWidth = 340; // Fixed width regardless of screen size
+    const jarWidth = fixedJarWidth;
+    const marbleRadius = jarWidth / 12;
+    const wallThickness = 20;
+
+    // Calculate total volume based on size multipliers
+    const totalSizeMultiplier = resolutionData.reduce((sum, data) => {
+        return sum + Math.pow((data.size || 1.0), 2); // Area is proportional to radius squared
+    }, 0);
+
+    // Base jar height calculation
+    // Adjust the multiplier here to change jar height (currently 0.0175)
+    const heightMultiplier = 0.0175;
+    const jarHeight = screenHeight * totalSizeMultiplier * heightMultiplier;
+
+    console.log(`Total size multiplier sum: ${totalSizeMultiplier.toFixed(2)}`);
+    console.log(`Calculated jar height: ${jarHeight.toFixed(2)}px (${(jarHeight / screenHeight).toFixed(2)}x screen height)`)
+
+    // Set canvas height to fit jar exactly
+    const topMargin = 150;
+    const bottomMargin = 50;
+    const canvasHeight = topMargin + jarHeight + bottomMargin;
+
+    // Create renderer with high DPI support
+    render = Render.create({
+        element: document.getElementById('canvas-container'),
+        engine: engine,
+        options: {
+            width: screenWidth,
+            height: canvasHeight,
+            wireframes: false,
+            background: 'transparent',
+            showAngleIndicator: false,
+            pixelRatio: window.devicePixelRatio || 1
+        }
+    });
+
+    // Calculate jar position (centered horizontally, positioned from top)
+    const jarX = screenWidth / 2;
+    const jarY = topMargin + jarHeight / 2;
+
+    // Create invisible jar walls (physics only, custom rendering)
+    const jarBottom = Bodies.rectangle(
         jarX,
-        jarY,
-        jarWidth: JAR_WIDTH,
-        jarHeight,
-        'jarRect.top': jarRect.top,
-        'window.scrollY': window.scrollY
-    });
-
-    // Create jar boundaries
-    const wallThickness = 10;
-
-    // Match the marble spawn offset
-    const physicsOffsetX = -100;
-
-    // Left wall (inner edge)
-    const leftWall = Bodies.rectangle(
-        jarX + physicsOffsetX - JAR_WIDTH / 2 + wallThickness / 2,
         jarY + jarHeight / 2,
+        jarWidth,
         wallThickness,
-        jarHeight,
-        { isStatic: true, label: 'leftWall' }
-    );
-
-    // Right wall (inner edge)
-    const rightWall = Bodies.rectangle(
-        jarX + physicsOffsetX + JAR_WIDTH / 2 - wallThickness / 2,
-        jarY + jarHeight / 2,
-        wallThickness,
-        jarHeight,
-        { isStatic: true, label: 'rightWall' }
-    );
-
-    // Bottom floor
-    const floorY = jarY + jarHeight - wallThickness / 2;
-    const floor = Bodies.rectangle(
-        jarX + physicsOffsetX,
-        floorY,
-        JAR_WIDTH - wallThickness * 2,
-        wallThickness,
-        { isStatic: true, label: 'floor' }
-    );
-
-    console.log('Floor position:', { floorY, jarY, jarHeight });
-    console.log('Wall positions:', {
-        leftWallX: jarX + physicsOffsetX - JAR_WIDTH / 2,
-        rightWallX: jarX + physicsOffsetX + JAR_WIDTH / 2
-    });
-
-    World.add(world, [leftWall, rightWall, floor]);
-
-    return { jarX, jarY, jarHeight };
-}
-
-// Add marbles with physics
-function addMarblesWithPhysics(jarPos) {
-    const marblesLayer = document.getElementById('marbles-layer');
-    const { jarX, jarY } = jarPos;
-
-    // Shift marbles left on X-axis
-    const offsetX = -100; // Adjust this value as needed
-
-    resolutions.forEach((resolution, index) => {
-        // Create physics body
-        const radius = MARBLE_SIZE / 2;
-        // Drop from jar center with slight randomness, shifted left
-        const x = jarX + offsetX + (Math.random() - 0.5) * 50;
-        const y = jarY + 20 + index * 5; // Start from top of jar, staggered
-
-        console.log(`Marble ${index}:`, { x, y, radius, jarX, jarY, offsetX });
-
-        const body = Bodies.circle(x, y, radius, {
-            restitution: 0.3,
-            friction: 0.5,
-            density: 0.001,
-            label: `marble-${index}`
-        });
-
-        World.add(world, body);
-
-        // Create DOM element
-        const marble = createMarbleElement(resolution);
-        marblesLayer.appendChild(marble);
-
-        // Store reference
-        marblesData.push({ body, element: marble, resolution });
-
-        // Add click handler
-        marble.addEventListener('click', () => expandMarble(marble, resolution, body));
-    });
-}
-
-// Create marble DOM element
-function createMarbleElement(resolution) {
-    const marble = document.createElement('div');
-    marble.className = 'marble';
-    marble.dataset.id = resolution.id;
-
-    const text = document.createElement('div');
-    text.className = 'marble-text';
-    text.textContent = resolution.resolution;
-
-    const metadata = document.createElement('div');
-    metadata.className = 'marble-metadata';
-    metadata.innerHTML = `
-        ${resolution.age}<br>
-        ${resolution.location}<br>
-        ${resolution.initials}
-    `;
-
-    marble.appendChild(text);
-    marble.appendChild(metadata);
-
-    return marble;
-}
-
-// Physics update loop
-function startPhysicsLoop() {
-    function update() {
-        Engine.update(engine, 1000 / 60);
-
-        // Sync DOM elements with physics bodies
-        marblesData.forEach(({ body, element }) => {
-            if (!element.classList.contains('expanded')) {
-                const x = body.position.x - MARBLE_SIZE / 2;
-                const y = body.position.y - MARBLE_SIZE / 2;
-                const angle = body.angle;
-
-                element.style.transform = `translate(${x}px, ${y}px) rotate(${angle}rad)`;
+        {
+            isStatic: true,
+            friction: 0.3,
+            restitution: 0.4,
+            slop: 0,
+            render: {
+                visible: false
             }
-        });
+        }
+    );
 
-        requestAnimationFrame(update);
+    const jarLeftWall = Bodies.rectangle(
+        jarX - jarWidth / 2,
+        jarY,
+        wallThickness,
+        jarHeight,
+        {
+            isStatic: true,
+            friction: 0.3,
+            restitution: 0.4,
+            slop: 0,
+            render: {
+                visible: false
+            }
+        }
+    );
+
+    const jarRightWall = Bodies.rectangle(
+        jarX + jarWidth / 2,
+        jarY,
+        wallThickness,
+        jarHeight,
+        {
+            isStatic: true,
+            friction: 0.3,
+            restitution: 0.4,
+            slop: 0,
+            render: {
+                visible: false
+            }
+        }
+    );
+
+    // Add jar to world
+    Composite.add(world, [jarBottom, jarLeftWall, jarRightWall]);
+
+    // Create marbles from JSON data (spawn from top of screen)
+    for (let i = 0; i < resolutionData.length; i++) {
+        const data = resolutionData[i];
+        const sizeMultiplier = data.size || 1.0; // Default to 1.0 if not specified
+        const marble = Bodies.circle(
+            jarX + (Math.random() - 0.5) * (jarWidth * 0.3),
+            -100 - (i * marbleRadius * 2.5), // Start above the visible canvas
+            marbleRadius * sizeMultiplier,
+            {
+                restitution: 0.5,
+                friction: 0.3,
+                frictionAir: 0.01,
+                density: 0.008,
+                slop: 0,
+                render: {
+                    fillStyle: data.color,
+                    strokeStyle: '#ffffff',
+                    lineWidth: 2
+                },
+                resolutionData: data,
+                marbleColor: data.color
+            }
+        );
+        marbles.push(marble);
     }
 
-    update();
+    // Add marbles to world
+    Composite.add(world, marbles);
+
+    // Run the engine with fixed timestep for stability
+    const runner = Runner.create({
+        delta: 1000 / 60,
+        isFixed: true
+    });
+    Runner.run(runner, engine);
+    Render.run(render);
+
+    // Custom rendering to add 3D jar and text to marbles
+    Events.on(render, 'afterRender', function() {
+        const context = render.context;
+
+        // Draw realistic 3D glass jar
+        drawGlassJar(context, jarX, jarY, jarWidth, jarHeight, wallThickness);
+
+        // Stop marbles after 15 seconds
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        if (elapsedTime >= 15) {
+            marbles.forEach(marble => {
+                Matter.Body.setVelocity(marble, { x: 0, y: 0 });
+                Matter.Body.setAngularVelocity(marble, 0);
+                Matter.Body.setStatic(marble, true);
+            });
+        }
+
+        marbles.forEach(marble => {
+            const pos = marble.position;
+            const radius = marble.circleRadius;
+            const angle = marble.angle;
+            const color = marble.marbleColor;
+            const text = marble.resolutionData.resolution;
+            const id = marble.resolutionData.id;
+
+            // Check if this marble matches the search filter
+            const isFiltered = searchFilter && !id.toLowerCase().includes(searchFilter.toLowerCase());
+
+            context.save();
+
+            // Draw radial gradient for 3D sphere effect
+            const gradient = context.createRadialGradient(
+                pos.x - radius * 0.3,
+                pos.y - radius * 0.3,
+                radius * 0.1,
+                pos.x,
+                pos.y,
+                radius
+            );
+
+            // Apply greyish filter if not matching search
+            if (isFiltered) {
+                gradient.addColorStop(0, 'rgba(200, 200, 200, 0.6)');
+                gradient.addColorStop(0.4, 'rgba(180, 180, 180, 0.5)');
+                gradient.addColorStop(1, 'rgba(160, 160, 160, 0.4)');
+            } else {
+                gradient.addColorStop(0, lightenColor(color, 40));
+                gradient.addColorStop(0.4, color);
+                gradient.addColorStop(1, darkenColor(color, 20));
+            }
+
+            context.beginPath();
+            context.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+            context.fillStyle = gradient;
+            context.fill();
+
+            // Add specular highlight for glossy effect
+            const highlightGradient = context.createRadialGradient(
+                pos.x - radius * 0.4,
+                pos.y - radius * 0.4,
+                0,
+                pos.x - radius * 0.4,
+                pos.y - radius * 0.4,
+                radius * 0.5
+            );
+            highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+            highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+            highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            context.beginPath();
+            context.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+            context.fillStyle = highlightGradient;
+            context.fill();
+
+            // Rotate context for text based on marble angle
+            context.translate(pos.x, pos.y);
+            context.rotate(angle);
+            context.translate(-pos.x, -pos.y);
+
+            // Set text style with improved rendering (translucent)
+            context.fillStyle = isFiltered ? 'rgba(120, 120, 120, 0.5)' : 'rgba(74, 74, 74, 0.75)';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.font = `${radius * 0.22}px 'Inter', 'Helvetica Neue', 'Arial', sans-serif`;
+
+            // Improve text rendering quality
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = 'high';
+
+            // Word wrap the text to fit in circle (lowercase)
+            const words = text.toLowerCase().split(' ');
+            const lines = [];
+            let currentLine = words[0];
+
+            for (let i = 1; i < words.length; i++) {
+                const testLine = currentLine + ' ' + words[i];
+                const metrics = context.measureText(testLine);
+                const maxWidth = radius * 1.6;
+
+                if (metrics.width < maxWidth) {
+                    currentLine = testLine;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                }
+            }
+            lines.push(currentLine);
+
+            // Draw each line centered vertically
+            const lineHeight = radius * 0.28;
+            const totalHeight = lines.length * lineHeight;
+            const startY = pos.y - totalHeight / 2 + lineHeight / 2;
+
+            lines.forEach((line, index) => {
+                context.fillText(line, pos.x, startY + index * lineHeight);
+            });
+
+            context.restore();
+        });
+    });
+
+    // Setup interaction handlers
+    setupInteractions();
+    setupTiltControls();
+    setupSearch();
 }
 
-// Perform intro scroll animation
-function performIntroScroll() {
-    // Start at bottom
-    window.scrollTo(0, document.body.scrollHeight);
+function setupSearch() {
+    const searchInput = document.getElementById('search-input');
 
-    let cancelled = false;
+    searchInput.addEventListener('input', (event) => {
+        searchFilter = event.target.value.trim();
+    });
 
-    const cancelScroll = () => {
-        cancelled = true;
-        cleanup();
-    };
+    // Clear search on escape key
+    searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            searchInput.value = '';
+            searchFilter = '';
+        }
+    });
+}
 
-    const cleanup = () => {
-        window.removeEventListener('wheel', cancelScroll);
-        window.removeEventListener('touchstart', cancelScroll);
-        window.removeEventListener('keydown', cancelScroll);
-        introComplete = true;
-    };
+function setupInteractions() {
+    const modal = document.getElementById('marble-modal');
+    const modalMarble = document.getElementById('modal-marble');
+    const modalId = document.getElementById('modal-id');
+    const modalInitials = document.getElementById('modal-initials');
+    const modalCity = document.getElementById('modal-city');
+    const modalAge = document.getElementById('modal-age');
 
-    // Listen for user interaction
-    window.addEventListener('wheel', cancelScroll, { passive: true });
-    window.addEventListener('touchstart', cancelScroll, { passive: true });
-    window.addEventListener('keydown', cancelScroll);
+    render.canvas.addEventListener('click', (event) => {
+        const rect = render.canvas.getBoundingClientRect();
+        const mousePosition = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
 
-    // Smooth scroll to top
-    const startTime = Date.now();
-    const startScroll = window.scrollY;
-    const targetScroll = 0;
+        const clickedMarble = marbles.find(marble => {
+            const distance = Math.sqrt(
+                Math.pow(mousePosition.x - marble.position.x, 2) +
+                Math.pow(mousePosition.y - marble.position.y, 2)
+            );
+            return distance <= marble.circleRadius;
+        });
 
-    function animateScroll() {
-        if (cancelled) return;
+        if (clickedMarble) {
+            showModal(clickedMarble);
+        }
+    });
 
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / INTRO_DURATION, 1);
+    function showModal(marble) {
+        const data = marble.resolutionData;
+        const color = marble.marbleColor;
 
-        // Ease out cubic
-        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        modalMarble.style.backgroundColor = color;
+        modalMarble.textContent = data.resolution.toLowerCase();
+        modalId.textContent = data.id;
+        modalInitials.textContent = `from ${data.initials}`;
+        modalCity.textContent = data.city;
+        modalAge.textContent = `${data.age} years young`;
 
-        const currentScroll = startScroll - (startScroll - targetScroll) * easeProgress;
-        window.scrollTo(0, currentScroll);
+        modal.classList.add('active');
+    }
 
-        if (progress < 1) {
-            requestAnimationFrame(animateScroll);
+    function closeModal() {
+        modal.classList.remove('active');
+    }
+
+    // Close modal when clicking anywhere
+    modal.addEventListener('click', () => {
+        closeModal();
+    });
+}
+
+function setupTiltControls() {
+    let gravityX = 0;
+    let gravityY = 1;
+
+    function requestPermission() {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission()
+                .then(permissionState => {
+                    if (permissionState === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                    }
+                })
+                .catch(console.error);
         } else {
-            cleanup();
+            window.addEventListener('deviceorientation', handleOrientation);
         }
     }
 
-    requestAnimationFrame(animateScroll);
-}
+    function handleOrientation(event) {
+        const gamma = event.gamma;
+        const beta = event.beta;
 
-// Expand marble on click
-function expandMarble(marbleElement, resolution, body) {
-    if (expandedMarble) {
-        collapseMarble();
-        return;
+        if (gamma !== null && beta !== null) {
+            gravityX = gamma / 90;
+            gravityY = 1 + (beta - 90) / 90;
+
+            engine.world.gravity.x = gravityX * 0.3;
+            engine.world.gravity.y = Math.max(0.5, gravityY * 0.4);
+        }
     }
 
-    expandedMarble = {
-        element: marbleElement,
-        scrollPosition: window.scrollY,
-        body: body,
-        originalPosition: { x: body.position.x, y: body.position.y }
-    };
-
-    // Make body static while expanded
-    Body.setStatic(body, true);
-
-    // Show overlay
-    const overlay = document.getElementById('overlay');
-    overlay.classList.remove('hidden');
-    overlay.classList.add('visible');
-
-    // Expand marble
-    marbleElement.classList.add('expanded');
-
-    // Disable body scroll
-    document.body.style.overflow = 'hidden';
-
-    // Click overlay to close
-    overlay.addEventListener('click', collapseMarble, { once: true });
+    requestPermission();
 }
-
-// Collapse marble
-function collapseMarble() {
-    if (!expandedMarble) return;
-
-    const overlay = document.getElementById('overlay');
-    overlay.classList.remove('visible');
-
-    expandedMarble.element.classList.remove('expanded');
-
-    // Restore physics body
-    Body.setStatic(expandedMarble.body, false);
-    Body.setPosition(expandedMarble.body, expandedMarble.originalPosition);
-
-    // Re-enable body scroll
-    document.body.style.overflow = '';
-
-    // Restore scroll position
-    window.scrollTo(0, expandedMarble.scrollPosition);
-
-    // Clean up overlay after transition
-    setTimeout(() => {
-        overlay.classList.add('hidden');
-    }, 300);
-
-    expandedMarble = null;
-}
-
-// Freeze all marbles (make them static)
-function freezeAllMarbles() {
-    console.log('Freezing all marbles...');
-    marblesData.forEach(({ body }) => {
-        Body.setStatic(body, true);
-    });
-}
-
-// Escape key to close expanded marble
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && expandedMarble) {
-        collapseMarble();
-    }
-});
 
 // Handle window resize
 window.addEventListener('resize', () => {
-    updateDimensions();
-    // Note: Full physics rebuild on resize would be complex
-    // For now, dimensions update on next page load
+    if (render) {
+        render.canvas.width = window.innerWidth;
+        render.canvas.height = window.innerHeight;
+    }
 });
 
 // Start the app
-init();
+console.log('Starting marble jar app...');
+init().catch(err => {
+    console.error('Error initializing app:', err);
+    alert('Error loading app. Please check console for details.');
+});
