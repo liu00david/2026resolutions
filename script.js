@@ -236,11 +236,11 @@ function setupPhysics() {
     const heightMultiplier = 0.014;
     const calculatedHeight = screenHeight * totalSizeMultiplier * heightMultiplier;
     const minHeight = screenHeight * 0.5; // Minimum jar height is half page height
-    const jarHeight = Math.max(calculatedHeight, minHeight);
+    const jarHeightBeforeAdjustment = Math.max(calculatedHeight, minHeight);
+    const jarHeight = jarHeightBeforeAdjustment - (screenHeight * 0.05); // Subtract 5% of screen height
 
     console.log(`Total size multiplier sum: ${totalSizeMultiplier.toFixed(2)}`);
     console.log(`Calculated jar height: ${jarHeight.toFixed(2)}px (${(jarHeight / screenHeight).toFixed(2)}x screen height)`)
-    console.log(`Min height enforced: ${jarHeight === minHeight}`)
 
     // Set canvas height to fit jar exactly
     const topMargin = 200;
