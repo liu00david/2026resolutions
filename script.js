@@ -181,13 +181,7 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
 
 // Initialize the application
 async function init() {
-    // Start with empty data to render jar immediately
-    resolutionData = [];
-
-    // Start the physics engine with empty jar
-    setupPhysics();
-
-    // Fetch real data in background
+    // Fetch real data first
     try {
         const response = await fetch('https://script.google.com/macros/s/AKfycbzANbs-5NxxmJaeQIFv6DPzZ_G00MzObbuj0MhTh1GChN9Ri2gwDzB5StdZHsC_g_yiBQ/exec');
         if (!response.ok) throw new Error('Failed to load data');
@@ -214,8 +208,8 @@ async function init() {
         ];
     }
 
-    // Reload physics with real data
-    reloadMarbles();
+    // Start the physics engine with correct data
+    setupPhysics();
 }
 
 function setupPhysics() {
@@ -239,7 +233,7 @@ function setupPhysics() {
 
     // Jar height based on number of marbles
     const N = resolutionData.length;
-    jarHeight = Math.max(500, 9.2 * N + 150);
+    jarHeight = Math.max(300, 9.2 * N + 150);
 
     console.log(`Jar dimensions: ${jarWidth}px wide x ${jarHeight.toFixed(0)}px tall for ${resolutionData.length} marbles`)
 

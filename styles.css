@@ -131,8 +131,14 @@ canvas {
     background: rgba(200, 200, 200, 0.4);
 }
 
-/* Submit Link */
-#submit-link {
+/* Navigation Links */
+#nav-links {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+#nav-links a {
     font-family: 'Kalam', 'Patrick Hand', cursive;
     font-size: 14px;
     color: #2a2a2a;
@@ -142,7 +148,7 @@ canvas {
     transition: opacity 0.3s ease;
 }
 
-#submit-link:hover {
+#nav-links a:hover {
     opacity: 0.6;
 }
 
@@ -206,7 +212,7 @@ canvas {
     justify-content: center;
     align-items: center;
     text-align: center;
-    padding: 28px;
+    padding: 26px;
     padding-top: 36px;
     font-family: 'Kalam', 'Patrick Hand', cursive;
     font-weight: 400;
@@ -265,4 +271,67 @@ canvas {
     color: rgba(42, 42, 42, 0.4);
     text-align: right;
     line-height: 1.4;
+}
+
+/* About Page Styles */
+#about-container {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 150px 20px 80px;
+    background: #ffffff;
+}
+
+#about-content {
+    max-width: 700px;
+    width: 100%;
+}
+
+#about-content h1 {
+    font-family: 'Caveat', 'Patrick Hand', cursive;
+    font-size: 42px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 40px;
+    text-align: center;
+}
+
+#about-content h2 {
+    font-family: 'Caveat', 'Patrick Hand', cursive;
+    font-size: 32px;
+    font-weight: 500;
+    color: #2a2a2a;
+    margin-top: 30px;
+    margin-bottom: 15px;
+}
+
+#about-content section {
+    margin-bottom: 35px;
+}
+
+#about-content p {
+    font-family: 'Kalam', 'Patrick Hand', cursive;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #333333;
+    margin-bottom: 15px;
+}
+
+.cta-button {
+    display: inline-block;
+    font-family: 'Kalam', 'Patrick Hand', cursive;
+    font-size: 18px;
+    color: #ffffff;
+    background: #2a2a2a;
+    padding: 12px 30px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: opacity 0.3s ease;
+    margin-top: 10px;
+}
+
+.cta-button:hover {
+    opacity: 0.8;
 }
