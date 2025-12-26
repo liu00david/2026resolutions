@@ -45,9 +45,9 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
 
     // Draw gradient background fill with rounded top
     const gradient = context.createLinearGradient(centerX, topY, centerX, bottomY);
-    gradient.addColorStop(0, 'rgba(220, 230, 240, 0.3)');
-    gradient.addColorStop(0.5, 'rgba(200, 215, 230, 0.4)');
-    gradient.addColorStop(1, 'rgba(180, 200, 220, 0.5)');
+    gradient.addColorStop(0, 'rgba(228, 233, 238, 0.5)');
+    gradient.addColorStop(0.5, 'rgba(210, 218, 225, 0.6)');
+    gradient.addColorStop(1, 'rgba(193, 203, 213, 0.7)');
 
     context.fillStyle = gradient;
     context.beginPath();
@@ -71,10 +71,10 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
     // Draw glass walls with thickness
     // Left wall
     const leftGradient = context.createLinearGradient(leftX - thickness, centerY, leftX + thickness, centerY);
-    leftGradient.addColorStop(0, 'rgba(200, 220, 240, 0.4)');
-    leftGradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.6)');
-    leftGradient.addColorStop(0.7, 'rgba(180, 200, 220, 0.3)');
-    leftGradient.addColorStop(1, 'rgba(255, 255, 255, 0.2)');
+    leftGradient.addColorStop(0, 'rgba(208, 218, 228, 0.6)');
+    leftGradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.7)');
+    leftGradient.addColorStop(0.7, 'rgba(190, 203, 215, 0.5)');
+    leftGradient.addColorStop(1, 'rgba(255, 255, 255, 0.3)');
 
     context.fillStyle = leftGradient;
     context.beginPath();
@@ -89,10 +89,10 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
 
     // Right wall
     const rightGradient = context.createLinearGradient(rightX - thickness, centerY, rightX + thickness, centerY);
-    rightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
-    rightGradient.addColorStop(0.3, 'rgba(180, 200, 220, 0.3)');
-    rightGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.6)');
-    rightGradient.addColorStop(1, 'rgba(200, 220, 240, 0.4)');
+    rightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+    rightGradient.addColorStop(0.3, 'rgba(190, 203, 215, 0.5)');
+    rightGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.7)');
+    rightGradient.addColorStop(1, 'rgba(208, 218, 228, 0.6)');
 
     context.fillStyle = rightGradient;
     context.beginPath();
@@ -107,10 +107,10 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
 
     // Bottom wall
     const bottomGradient = context.createLinearGradient(centerX, bottomY - thickness, centerX, bottomY + thickness);
-    bottomGradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
-    bottomGradient.addColorStop(0.4, 'rgba(180, 200, 220, 0.3)');
-    bottomGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.5)');
-    bottomGradient.addColorStop(1, 'rgba(200, 220, 240, 0.4)');
+    bottomGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+    bottomGradient.addColorStop(0.4, 'rgba(190, 203, 215, 0.5)');
+    bottomGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.6)');
+    bottomGradient.addColorStop(1, 'rgba(208, 218, 228, 0.6)');
 
     context.fillStyle = bottomGradient;
     context.beginPath();
@@ -129,7 +129,7 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
     context.fill();
 
     // Add subtle edge highlights for definition
-    context.strokeStyle = 'rgba(100, 120, 140, 0.3)';
+    context.strokeStyle = 'rgba(100, 120, 140, 0.5)';
     context.lineWidth = 1.5;
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -145,7 +145,7 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
     context.stroke();
 
     // Inner edge - lighter
-    context.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    context.strokeStyle = 'rgba(255, 255, 255, 0.5)';
     context.lineWidth = 1;
     context.beginPath();
     context.moveTo(leftX + thickness, topY);

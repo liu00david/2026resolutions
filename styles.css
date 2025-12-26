@@ -224,6 +224,11 @@ canvas {
     font-weight: 600;
     color: rgba(180, 180, 180, 0.6);
     text-align: center;
+    /* Prevent overflow/cutoff on mobile */
+    width: 100%;
+    max-width: 100vw;
+    overflow: visible;
+    white-space: nowrap;
 }
 
 /* Watermark */
