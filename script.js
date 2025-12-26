@@ -12,6 +12,8 @@ let searchFilters = {
     city: ''
 };
 let startTime = Date.now();
+let settledMarbles = 0;
+let jarTopY = 0;
 
 // Helper functions for color manipulation
 function lightenColor(color, percent) {
@@ -211,7 +213,8 @@ function setupPhysics() {
     engine = Engine.create({
         constraintIterations: 4,
         positionIterations: 8,
-        velocityIterations: 6
+        velocityIterations: 6,
+        enableSleeping: true // Enable sleeping for stationary bodies
     });
     world = engine.world;
     engine.world.gravity.y = 0.8;
@@ -232,12 +235,16 @@ function setupPhysics() {
     }, 0);
 
     // Base jar height calculation
-    // Adjust the multiplier here to change jar height (currently 0.014)
-    const heightMultiplier = 0.014;
+    // Adjust the multiplier here to change jar height (currently 0.011)
+    const heightMultiplier = 0.011;
     const calculatedHeight = screenHeight * totalSizeMultiplier * heightMultiplier;
     const minHeight = screenHeight * 0.5; // Minimum jar height is half page height
-    const jarHeightBeforeAdjustment = Math.max(calculatedHeight, minHeight);
-    const jarHeight = jarHeightBeforeAdjustment - (screenHeight * 0.05); // Subtract 5% of screen height
+    const baseJarHeight = Math.max(calculatedHeight, minHeight);
+
+    // Add 3 ball heights for headroom
+    const ballHeight = marbleRadius * 2;
+    const headroom = ballHeight * 3;
+    const jarHeight = baseJarHeight + headroom;
 
     console.log(`Total size multiplier sum: ${totalSizeMultiplier.toFixed(2)}`);
     console.log(`Calculated jar height: ${jarHeight.toFixed(2)}px (${(jarHeight / screenHeight).toFixed(2)}x screen height)`)
@@ -264,6 +271,13 @@ function setupPhysics() {
     // Calculate jar position (centered horizontally, positioned from top)
     const jarX = screenWidth / 2;
     const jarY = topMargin + jarHeight / 2;
+    jarTopY = jarY - jarHeight / 2; // Store jar top position globally
+
+    // Position counter above jar
+    const counterElement = document.getElementById('counter');
+    counterElement.style.left = `${jarX}px`;
+    counterElement.style.top = `${jarTopY - 60}px`;
+    counterElement.style.transform = 'translateX(-50%)';
 
     // Create invisible jar walls (physics only, custom rendering)
     const jarBottom = Bodies.rectangle(
@@ -273,8 +287,8 @@ function setupPhysics() {
         wallThickness,
         {
             isStatic: true,
-            friction: 0.3,
-            restitution: 0.4,
+            friction: 0.8, // Increased friction on bottom
+            restitution: 0.2, // Reduced bounce on bottom
             slop: 0,
             render: {
                 visible: false
@@ -289,8 +303,8 @@ function setupPhysics() {
         jarHeight,
         {
             isStatic: true,
-            friction: 0.3,
-            restitution: 0.4,
+            friction: 0.5,
+            restitution: 0.2, // Reduced bounce on walls
             slop: 0,
             render: {
                 visible: false
@@ -305,8 +319,8 @@ function setupPhysics() {
         jarHeight,
         {
             isStatic: true,
-            friction: 0.3,
-            restitution: 0.4,
+            friction: 0.5,
+            restitution: 0.2, // Reduced bounce on walls
             slop: 0,
             render: {
                 visible: false
@@ -326,11 +340,12 @@ function setupPhysics() {
             -100 - (i * marbleRadius * 2.5), // Start above the visible canvas
             marbleRadius * sizeMultiplier,
             {
-                restitution: 0.5,
-                friction: 0.3,
-                frictionAir: 0.01,
+                restitution: 0.3, // Reduced from 0.5 - less bouncy
+                friction: 0.5, // Increased from 0.3 - more friction
+                frictionAir: 0.02, // Increased from 0.01 - more air resistance
                 density: 0.008,
                 slop: 0,
+                sleepThreshold: 60, // Default threshold - prevents premature freezing
                 render: {
                     fillStyle: data.color,
                     strokeStyle: '#ffffff',
@@ -361,14 +376,25 @@ function setupPhysics() {
         // Draw realistic 3D glass jar
         drawGlassJar(context, jarX, jarY, jarWidth, jarHeight, wallThickness);
 
-        // Stop marbles after 15 seconds
+        // Track settled marbles
         const elapsedTime = (Date.now() - startTime) / 1000;
-        if (elapsedTime >= 15) {
-            marbles.forEach(marble => {
-                Matter.Body.setVelocity(marble, { x: 0, y: 0 });
-                Matter.Body.setAngularVelocity(marble, 0);
-                Matter.Body.setStatic(marble, true);
-            });
+
+        // Count settled marbles (low velocity or sleeping)
+        let settled = 0;
+        marbles.forEach(marble => {
+            const velocity = Math.sqrt(
+                marble.velocity.x * marble.velocity.x +
+                marble.velocity.y * marble.velocity.y
+            );
+            // Count as settled if velocity is low or if marble is sleeping
+            if ((velocity < 0.5 && marble.position.y > jarTopY) || marble.isSleeping) {
+                settled++;
+            }
+        });
+
+        if (settled > settledMarbles) {
+            settledMarbles = settled;
+            updateCounter();
         }
 
         marbles.forEach(marble => {
@@ -625,9 +651,18 @@ window.addEventListener('resize', () => {
     }
 });
 
+// Update counter based on settled marbles
+function updateCounter() {
+    const counterElement = document.getElementById('counter');
+    counterElement.textContent = settledMarbles;
+}
+
 // Start the app
 console.log('Starting marble jar app...');
-init().catch(err => {
+init().then(() => {
+    // Initialize counter
+    updateCounter();
+}).catch(err => {
     console.error('Error initializing app:', err);
     alert('Error loading app. Please check console for details.');
 });

@@ -207,6 +207,17 @@ canvas {
     margin: 0;
 }
 
+/* Counter */
+#counter {
+    position: absolute;
+    z-index: 50;
+    font-family: 'Caveat', 'Patrick Hand', cursive;
+    font-size: 48px;
+    font-weight: 600;
+    color: rgba(180, 180, 180, 0.6);
+    text-align: center;
+}
+
 /* Watermark */
 #watermark {
     position: fixed;
