@@ -8,6 +8,7 @@ let engine, render, world;
 let searchFilters = { id: '', resolution: '', initials: '', city: '' };
 let spawnedMarbles = 0;
 let jarTopY = 0;
+let jarX, jarY, jarWidth, jarHeight, marbleRadius, wallThickness;
 
 // Helper function to ensure color has # prefix
 function normalizeColor(color) {
@@ -180,6 +181,13 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
 
 // Initialize the application
 async function init() {
+    // Start with empty data to render jar immediately
+    resolutionData = [];
+
+    // Start the physics engine with empty jar
+    setupPhysics();
+
+    // Fetch real data in background
     try {
         const response = await fetch('https://script.google.com/macros/s/AKfycbzANbs-5NxxmJaeQIFv6DPzZ_G00MzObbuj0MhTh1GChN9Ri2gwDzB5StdZHsC_g_yiBQ/exec');
         if (!response.ok) throw new Error('Failed to load data');
@@ -206,8 +214,8 @@ async function init() {
         ];
     }
 
-    // Start the physics engine
-    setupPhysics();
+    // Reload physics with real data
+    reloadMarbles();
 }
 
 function setupPhysics() {
@@ -216,7 +224,7 @@ function setupPhysics() {
         constraintIterations: 4,
         positionIterations: 8,
         velocityIterations: 6,
-        enableSleeping: true // Enable sleeping for stationary bodies
+        enableSleeping: true
     });
     world = engine.world;
     engine.world.gravity.y = 0.8;
@@ -224,21 +232,19 @@ function setupPhysics() {
     // Get viewport width
     const screenWidth = window.innerWidth;
 
-    // Fixed jar dimensions
-    const jarWidth = 330;
-    const marbleRadius = jarWidth / 12;
-    const wallThickness = 20;
+    // Fixed jar dimensions (store globally for reloadMarbles)
+    jarWidth = 330;
+    marbleRadius = jarWidth / 12;
+    wallThickness = 20;
 
     // Jar height based on number of marbles
-    // Simple linear formula: height = max(330, 9.2*N + 150)
     const N = resolutionData.length;
-    const jarHeight = Math.max(500, 9.2 * N + 150);
+    jarHeight = Math.max(500, 9.2 * N + 150);
 
     console.log(`Jar dimensions: ${jarWidth}px wide x ${jarHeight.toFixed(0)}px tall for ${resolutionData.length} marbles`)
 
     // Set canvas height to fit jar exactly
-    // Increased margins for better spacing: banner -> counter -> jar
-    const topMargin = 250; // Space for banner + counter with equal spacing
+    const topMargin = 250;
     const bottomMargin = 80;
     const canvasHeight = topMargin + jarHeight + bottomMargin;
 
@@ -256,15 +262,15 @@ function setupPhysics() {
         }
     });
 
-    // Calculate jar position (centered horizontally, positioned from top)
-    const jarX = screenWidth / 2;
-    const jarY = topMargin + jarHeight / 2;
-    jarTopY = jarY - jarHeight / 2; // Store jar top position globally
+    // Calculate jar position (store globally for reloadMarbles)
+    jarX = screenWidth / 2;
+    jarY = topMargin + jarHeight / 2;
+    jarTopY = jarY - jarHeight / 2;
 
-    // Position counter above jar - properly centered with equidistant spacing
+    // Position counter above jar
     const counterElement = document.getElementById('counter');
     counterElement.style.left = '50%';
-    counterElement.style.top = `${jarTopY - 80}px`; // Increased from 60 to 80 for more space
+    counterElement.style.top = `${jarTopY - 80}px`;
     counterElement.style.transform = 'translateX(-50%)';
 
     // Create invisible jar walls
@@ -383,9 +389,9 @@ function setupPhysics() {
                 gradient.addColorStop(0.4, 'rgba(180, 180, 180, 0.5)');
                 gradient.addColorStop(1, 'rgba(160, 160, 160, 0.4)');
             } else {
-                gradient.addColorStop(0, adjustColor(color, 40));
+                gradient.addColorStop(0, adjustColor(color, 20));
                 gradient.addColorStop(0.4, color);
-                gradient.addColorStop(1, adjustColor(color, -20));
+                gradient.addColorStop(1, adjustColor(color, -15));
             }
 
             context.beginPath();
@@ -402,8 +408,8 @@ function setupPhysics() {
                 pos.y - radius * 0.4,
                 radius * 0.5
             );
-            highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-            highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+            highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+            highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.05)');
             highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
             context.beginPath();
@@ -481,7 +487,7 @@ function setupPhysics() {
             // Draw each line centered vertically
             const lineHeight = radius * 0.28;
             const totalHeight = lines.length * lineHeight;
-            const startY = pos.y - totalHeight / 2 + lineHeight / 2 + 1;
+            const startY = pos.y - totalHeight / 2 + lineHeight / 2 + 2;
 
             lines.forEach((line, index) => {
                 context.fillText(line, pos.x, startY + index * lineHeight);
@@ -495,6 +501,53 @@ function setupPhysics() {
     setupInteractions();
     setupTiltControls();
     setupSearch();
+}
+
+// Reload marbles with new data
+function reloadMarbles() {
+    // Remove old marbles from world
+    if (marbles.length > 0) {
+        Composite.remove(world, marbles);
+    }
+
+    // Clear marble array and reset counter
+    marbles = [];
+    spawnedMarbles = 0;
+    updateCounter();
+
+    // Create new marbles from updated data
+    for (let i = 0; i < resolutionData.length; i++) {
+        const data = resolutionData[i];
+        const sizeMultiplier = normalizeSize(data.size);
+        const normalizedColor = normalizeColor(data.color);
+
+        const marble = Bodies.circle(
+            jarX + (Math.random() - 0.5) * (jarWidth * 0.3),
+            -100 - (i * marbleRadius * 2.5),
+            marbleRadius * sizeMultiplier,
+            {
+                restitution: 0.3,
+                friction: 0.5,
+                frictionAir: 0.02,
+                density: 0.008,
+                slop: 0,
+                sleepThreshold: 60,
+                render: {
+                    fillStyle: normalizedColor,
+                    strokeStyle: '#ffffff',
+                    lineWidth: 2
+                },
+                resolutionData: data,
+                marbleColor: normalizedColor
+            }
+        );
+        marbles.push(marble);
+    }
+
+    // Add new marbles to world
+    Composite.add(world, marbles);
+
+    console.log(`Reloaded ${resolutionData.length} marbles`);
 }
 
 function setupSearch() {
