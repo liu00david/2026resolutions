@@ -436,8 +436,8 @@ function setupPhysics() {
             // Dynamic font size based on text length
             // Short text = larger font, long text = smaller font
             const textLength = displayText.length;
-            const minFontSize = radius * 0.15;  // Minimum font size (for long text)
-            const maxFontSize = radius * 0.28;  // Maximum font size (for short text)
+            const minFontSize = radius * 0.2;  // Minimum font size (for long text)
+            const maxFontSize = radius * 0.35;  // Maximum font size (for short text)
 
             // Scale font size inversely with text length
             // Short text (10 chars) → maxFontSize
@@ -622,9 +622,11 @@ function setupInteractions() {
         modal.classList.remove('active');
     }
 
-    // Close modal when clicking anywhere
-    modal.addEventListener('click', () => {
-        closeModal();
+    // Close modal when clicking background (but not the card)
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
     });
 }
 
@@ -689,10 +691,15 @@ function updateCounter() {
 
 // Start the app
 console.log('Starting marble jar app...');
+// Show loading text in counter
+const counterElement = document.getElementById('counter');
+counterElement.textContent = '...';
+
 init().then(() => {
-    // Initialize counter
+    // Initialize counter with actual count
     updateCounter();
 }).catch(err => {
     console.error('Error initializing app:', err);
+    counterElement.textContent = 'error';
     alert('Error loading app. Please check console for details.');
 });

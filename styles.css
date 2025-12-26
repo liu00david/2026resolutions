@@ -182,10 +182,30 @@ canvas {
     align-items: center;
     gap: 0;
     background: rgba(255, 255, 255, 0.95);
-    padding: 40px;
+    padding: 30px 40px 40px;
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     animation: scaleIn 0.4s ease;
+    position: relative;
+}
+
+#card-title {
+    font-family: 'Caveat', 'Patrick Hand', cursive;
+    font-size: 28px;
+    font-weight: 600;
+    color: #1a1a1a;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+#card-footer {
+    font-family: 'Kalam', 'Patrick Hand', cursive;
+    font-size: 14px;
+    color: #666666;
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 @keyframes scaleIn {
@@ -242,9 +262,13 @@ canvas {
     margin: 0;
 }
 
+
 /* Counter */
 #counter {
     position: absolute;
+    left: 50%;
+    top: 150px;
+    transform: translateX(-50%);
     z-index: 50;
     font-family: 'Caveat', 'Patrick Hand', cursive;
     font-size: 48px;
