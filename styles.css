@@ -359,3 +359,8 @@ canvas {
 .cta-button:hover {
     opacity: 0.8;
 }
+
+/* Error overlay button hover states */
+#error-overlay button:hover {
+    opacity: 0.8;
+}

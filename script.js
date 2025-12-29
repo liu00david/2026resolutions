@@ -10,6 +10,172 @@ let spawnedMarbles = 0;
 let jarTopY = 0;
 let jarX, jarY, jarWidth, jarHeight, marbleRadius, wallThickness;
 
+// Cache configuration
+const CACHE_KEY = 'resolutions_cache';
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes in milliseconds (faster refresh for new submissions)
+
+// Data validation schema
+const ResolutionSchema = {
+    validate(data) {
+        const errors = [];
+
+        if (!data || typeof data !== 'object') {
+            errors.push('Data must be an object');
+            return { valid: false, errors, sanitized: null };
+        }
+
+        const sanitized = {
+            id: this.validateId(data.id, errors),
+            resolution: this.validateResolution(data.resolution, errors),
+            initials: this.validateInitials(data.initials, errors),
+            city: this.validateCity(data.city, errors),
+            age: this.validateAge(data.age, errors),
+            color: this.validateColor(data.color, errors),
+            size: this.validateSize(data.size, errors)
+        };
+
+        return { valid: errors.length === 0, errors, sanitized };
+    },
+
+    validateId(value, errors) {
+        if (!value || typeof value !== 'string') {
+            errors.push('id must be a non-empty string');
+            return 'unknown';
+        }
+        return String(value).trim();
+    },
+
+    validateResolution(value, errors) {
+        if (!value || typeof value !== 'string') {
+            errors.push('resolution must be a non-empty string');
+            return 'No resolution provided';
+        }
+        const trimmed = String(value).trim();
+        if (trimmed.length === 0) {
+            errors.push('resolution cannot be empty');
+            return 'No resolution provided';
+        }
+        if (trimmed.length > 500) {
+            return trimmed.substring(0, 500);
+        }
+        return trimmed;
+    },
+
+    validateInitials(value, errors) {
+        if (!value || typeof value !== 'string') {
+            errors.push('initials must be a string');
+            return 'UN';
+        }
+        const trimmed = String(value).trim().toUpperCase();
+        if (trimmed.length === 0 || trimmed.length > 5) {
+            errors.push('initials must be 1-5 characters');
+            return trimmed.substring(0, 5) || 'UN';
+        }
+        return trimmed;
+    },
+
+    validateCity(value, errors) {
+        if (!value || typeof value !== 'string') {
+            errors.push('city must be a string');
+            return 'Unknown';
+        }
+        const trimmed = String(value).trim();
+        if (trimmed.length > 100) {
+            return trimmed.substring(0, 100);
+        }
+        return trimmed || 'Unknown';
+    },
+
+    validateAge(value, errors) {
+        if (value === null || value === undefined || value === '') {
+            return null; // Age is optional
+        }
+        const age = parseInt(value, 10);
+        if (isNaN(age) || age < 1 || age > 120) {
+            errors.push('age must be between 1 and 120');
+            return null;
+        }
+        return age;
+    },
+
+    validateColor(value, errors) {
+        if (!value || typeof value !== 'string') {
+            return '#FFB3BA'; // Default pastel pink
+        }
+        const trimmed = String(value).trim();
+        // Validate hex color format
+        const hexRegex = /^#?[0-9A-Fa-f]{6}$/;
+        if (!hexRegex.test(trimmed)) {
+            errors.push('color must be valid hex format');
+            return '#FFB3BA';
+        }
+        return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+    },
+
+    validateSize(value, errors) {
+        if (value === null || value === undefined || value === '') {
+            return 1.0;
+        }
+        if (typeof value === 'number') {
+            if (!isFinite(value) || value <= 0 || value > 2) {
+                errors.push('size must be between 0 and 2');
+                return 1.0;
+            }
+            return value;
+        }
+        if (typeof value === 'string') {
+            const lower = value.toLowerCase().trim();
+            if (lower === 'small') return 0.85;
+            if (lower === 'medium') return 1.0;
+            if (lower === 'large') return 1.15;
+
+            const parsed = parseFloat(value);
+            if (!isFinite(parsed) || parsed <= 0 || parsed > 2) {
+                errors.push('size must be between 0 and 2');
+                return 1.0;
+            }
+            return parsed;
+        }
+        return 1.0;
+    },
+
+    validateArray(data) {
+        if (!Array.isArray(data)) {
+            console.error('Data is not an array:', data);
+            return { valid: false, errors: ['Data must be an array'], sanitized: [] };
+        }
+
+        if (data.length === 0) {
+            console.warn('Data array is empty');
+            return { valid: false, errors: ['Data array is empty'], sanitized: [] };
+        }
+
+        const results = data.map((item, index) => {
+            const result = this.validate(item);
+            if (!result.valid) {
+                console.warn(`Validation errors for item ${index}:`, result.errors);
+            }
+            return result;
+        });
+
+        // Filter out invalid items and extract sanitized data
+        const sanitized = results
+            .filter(r => r.valid)
+            .map(r => r.sanitized);
+
+        const totalErrors = results.filter(r => !r.valid).length;
+
+        return {
+            valid: sanitized.length > 0,
+            errors: totalErrors > 0 ? [`${totalErrors} items failed validation`] : [],
+            sanitized,
+            totalItems: data.length,
+            validItems: sanitized.length,
+            invalidItems: totalErrors
+        };
+    }
+};
+
 // Helper function to ensure color has # prefix
 function normalizeColor(color) {
     if (!color) return '#FFB3BA'; // Default color if missing
@@ -179,17 +345,145 @@ function drawGlassJar(context, centerX, centerY, width, height, thickness) {
     context.restore();
 }
 
-// Initialize the application
-async function init() {
-    // Fetch real data first
-    try {
-        const response = await fetch('https://script.google.com/macros/s/AKfycbzANbs-5NxxmJaeQIFv6DPzZ_G00MzObbuj0MhTh1GChN9Ri2gwDzB5StdZHsC_g_yiBQ/exec');
-        if (!response.ok) throw new Error('Failed to load data');
-        resolutionData = await response.json();
-    } catch (error) {
-        console.log('Loading from embedded data (use a local server to load from JSON)');
-        // Fallback to embedded data if JSON fails to load
-        resolutionData = [
+// Cache utilities
+const CacheManager = {
+    set(key, data) {
+        try {
+            const cacheObject = {
+                data: data,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(key, JSON.stringify(cacheObject));
+            console.log(`Cache saved: ${data.length} items`);
+            return true;
+        } catch (error) {
+            console.warn('Failed to save to cache:', error);
+            return false;
+        }
+    },
+
+    get(key, ttl) {
+        try {
+            const cached = localStorage.getItem(key);
+            if (!cached) {
+                console.log('No cache found');
+                return null;
+            }
+
+            const cacheObject = JSON.parse(cached);
+            const age = Date.now() - cacheObject.timestamp;
+
+            if (age > ttl) {
+                console.log(`Cache expired (${Math.round(age / 1000)}s old)`);
+                this.clear(key);
+                return null;
+            }
+
+            console.log(`Cache hit (${Math.round(age / 1000)}s old)`);
+            return cacheObject.data;
+        } catch (error) {
+            console.warn('Failed to read from cache:', error);
+            this.clear(key);
+            return null;
+        }
+    },
+
+    clear(key) {
+        try {
+            localStorage.removeItem(key);
+            console.log('Cache cleared');
+        } catch (error) {
+            console.warn('Failed to clear cache:', error);
+        }
+    }
+};
+
+// UI state management
+const UIState = {
+    showLoading(message = 'Loading resolutions...') {
+        const counterElement = document.getElementById('counter');
+        counterElement.textContent = '...';
+        counterElement.style.color = 'rgba(180, 180, 180, 0.6)';
+        console.log(message);
+    },
+
+    showError(message) {
+        const counterElement = document.getElementById('counter');
+        counterElement.textContent = '✕';
+        counterElement.style.color = 'rgba(220, 80, 80, 0.8)';
+
+        // Create error message overlay
+        const errorDiv = document.createElement('div');
+        errorDiv.id = 'error-overlay';
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px 40px;
+            border-radius: 12px;
+            border: 2px solid #dc5050;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            z-index: 2000;
+            max-width: 400px;
+            text-align: center;
+            font-family: 'Kalam', 'Patrick Hand', cursive;
+        `;
+
+        errorDiv.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 15px;">⚠️</div>
+            <div style="font-size: 24px; font-weight: 500; color: #dc5050; margin-bottom: 10px;">Oops!</div>
+            <div style="font-size: 16px; color: #333; line-height: 1.5; margin-bottom: 20px;">${message}</div>
+            <button id="retry-button" style="
+                background: #2a2a2a;
+                color: white;
+                border: none;
+                padding: 10px 24px;
+                border-radius: 6px;
+                font-family: 'Kalam', cursive;
+                font-size: 16px;
+                cursor: pointer;
+                transition: opacity 0.2s;
+            ">Try Again</button>
+            <button id="use-cached-button" style="
+                background: transparent;
+                color: #2a2a2a;
+                border: 1px solid #2a2a2a;
+                padding: 10px 24px;
+                border-radius: 6px;
+                font-family: 'Kalam', cursive;
+                font-size: 16px;
+                cursor: pointer;
+                margin-left: 10px;
+                transition: opacity 0.2s;
+            ">Use Fallback Data</button>
+        `;
+
+        document.body.appendChild(errorDiv);
+
+        document.getElementById('retry-button').addEventListener('click', () => {
+            document.getElementById('error-overlay').remove();
+            init();
+        });
+
+        document.getElementById('use-cached-button').addEventListener('click', () => {
+            document.getElementById('error-overlay').remove();
+            loadFallbackData();
+        });
+    },
+
+    showSuccess(count) {
+        const counterElement = document.getElementById('counter');
+        counterElement.style.color = 'rgba(180, 180, 180, 0.6)';
+        console.log(`Successfully loaded ${count} resolutions`);
+    }
+};
+
+// Fallback data function
+function loadFallbackData() {
+    console.log('Loading fallback data...');
+    resolutionData = [
             { id: "001", resolution: "Wake up before sunrise every day", initials: "DL", city: "Chicago, USA", age: 25, color: "#FFB3BA", size: 1.0 },
             { id: "002", resolution: "Complete my first triathlon in June", initials: "SK", city: "New York, USA", age: 32, color: "#FFDFBA", size: 1.1 },
             { id: "003", resolution: "Have real conversations with strangers weekly", initials: "MJ", city: "Austin, USA", age: 28, color: "#FFFFBA", size: 0.9 },
@@ -205,12 +499,188 @@ async function init() {
             { id: "013", resolution: "Record and publish twelve podcast episodes", initials: "DK", city: "Los Angeles, USA", age: 28, color: "#BAE1FF", size: 1.0 },
             { id: "014", resolution: "Write handwritten letters to ten distant friends", initials: "AL", city: "Phoenix, USA", age: 30, color: "#E0BBE4", size: 1.1 },
             { id: "015", resolution: "Host monthly dinners to reconnect with loved ones", initials: "VM", city: "Minneapolis, USA", age: 27, color: "#FFC8DD", size: 0.9 }
-        ];
+    ];
+
+    // Validate fallback data
+    const validation = ResolutionSchema.validateArray(resolutionData);
+    if (validation.valid) {
+        resolutionData = validation.sanitized;
+        setupPhysics();
+        UIState.showSuccess(resolutionData.length);
+    } else {
+        console.error('Fallback data validation failed:', validation.errors);
+        UIState.showError('Unable to load data. Please try again later.');
+    }
+}
+
+// Initialize the application
+async function init() {
+    UIState.showLoading('Loading resolutions...');
+
+    // Try to get cached data first
+    const cachedData = CacheManager.get(CACHE_KEY, CACHE_TTL);
+    if (cachedData) {
+        console.log('Using cached data');
+        const validation = ResolutionSchema.validateArray(cachedData);
+
+        if (validation.valid) {
+            resolutionData = validation.sanitized;
+            setupPhysics();
+            UIState.showSuccess(resolutionData.length);
+
+            // Still fetch fresh data in background to update cache
+            fetchFreshData(true);
+            return;
+        } else {
+            console.warn('Cached data validation failed, fetching fresh data');
+            CacheManager.clear(CACHE_KEY);
+        }
     }
 
-    // Start the physics engine with correct data
-    setupPhysics();
+    // No valid cache, fetch fresh data
+    await fetchFreshData(false);
 }
+
+// Helper to detect if data has changed (compares count and content)
+function hasDataChanged(oldData, newData) {
+    // Different count = definitely changed
+    if (oldData.length !== newData.length) {
+        console.log(`Count changed: ${oldData.length} → ${newData.length}`);
+        return true;
+    }
+
+    // Same count, but check if content changed
+    // Create a simple hash of all IDs and resolutions
+    const createHash = (data) => {
+        return data.map(item => `${item.id}:${item.resolution}:${item.color}`).sort().join('|');
+    };
+
+    const oldHash = createHash(oldData);
+    const newHash = createHash(newData);
+
+    if (oldHash !== newHash) {
+        console.log('Content changed (same count but different data)');
+        return true;
+    }
+
+    return false;
+}
+
+// Fetch data from Google Sheets
+async function fetchFreshData(isBackground = false) {
+    try {
+        if (!isBackground) {
+            UIState.showLoading('Fetching latest resolutions...');
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const response = await fetch(
+            'https://script.google.com/macros/s/AKfycbzANbs-5NxxmJaeQIFv6DPzZ_G00MzObbuj0MhTh1GChN9Ri2gwDzB5StdZHsC_g_yiBQ/exec',
+            {
+                signal: controller.signal,
+                mode: 'cors',
+                cache: 'no-cache'
+            }
+        );
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Invalid response format (expected JSON)');
+        }
+
+        const rawData = await response.json();
+
+        // Validate the fetched data
+        const validation = ResolutionSchema.validateArray(rawData);
+
+        if (!validation.valid) {
+            throw new Error(`Data validation failed: ${validation.errors.join(', ')}`);
+        }
+
+        // Log validation warnings if any items were filtered out
+        if (validation.invalidItems > 0) {
+            console.warn(`${validation.invalidItems} of ${validation.totalItems} items failed validation and were filtered out`);
+        }
+
+        // Save to cache
+        CacheManager.set(CACHE_KEY, rawData);
+
+        if (isBackground) {
+            console.log('Background fetch completed, cache updated');
+
+            // Check if data changed (count or content)
+            const dataChanged = hasDataChanged(resolutionData, validation.sanitized);
+
+            if (dataChanged) {
+                console.log('Data changed, reloading marbles...');
+                resolutionData = validation.sanitized;
+                reloadMarbles();
+            } else {
+                console.log('No changes detected, keeping current marbles');
+            }
+        } else {
+            resolutionData = validation.sanitized;
+            setupPhysics();
+            UIState.showSuccess(resolutionData.length);
+        }
+
+    } catch (error) {
+        console.error('Failed to fetch data:', error);
+
+        if (isBackground) {
+            console.log('Background fetch failed, keeping existing data');
+            return;
+        }
+
+        // Determine error message
+        let errorMessage = 'Unable to load resolutions.';
+
+        if (error.name === 'AbortError') {
+            errorMessage = 'Request timed out. Please check your connection.';
+        } else if (error.message.includes('HTTP')) {
+            errorMessage = 'Server error. Please try again later.';
+        } else if (error.message.includes('validation')) {
+            errorMessage = 'Data format error. Please try again later.';
+        } else if (!navigator.onLine) {
+            errorMessage = 'No internet connection. Please check your network.';
+        }
+
+        UIState.showError(errorMessage);
+    }
+}
+
+// Expose cache control to window for debugging/manual refresh
+window.resolutionCache = {
+    clear: () => CacheManager.clear(CACHE_KEY),
+    refresh: () => {
+        CacheManager.clear(CACHE_KEY);
+        location.reload();
+    },
+    info: () => {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (!cached) {
+            console.log('No cache found');
+            return null;
+        }
+        const cacheObject = JSON.parse(cached);
+        const age = Date.now() - cacheObject.timestamp;
+        console.log({
+            items: cacheObject.data.length,
+            ageSeconds: Math.round(age / 1000),
+            expiresInSeconds: Math.round((CACHE_TTL - age) / 1000)
+        });
+        return cacheObject;
+    }
+};
+
 
 function setupPhysics() {
     // Create engine with improved settings
